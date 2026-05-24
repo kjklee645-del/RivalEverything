@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#163b36">
+    <title>Rival Everything Prototype</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section id="creator" class="creator screen" aria-labelledby="creator-title">
+        <div class="brand-row">
+          <div class="sigil" aria-hidden="true"></div>
+          <div>
+            <p class="eyebrow">Rival Everything</p>
+            <h1 id="creator-title">대칭자가 태어나는 섬</h1>
+          </div>
+        </div>
+
+        <div class="creator-grid">
+          <section class="panel creator-panel" aria-label="정체성 선택">
+            <div class="section-heading">
+              <span>정체성</span>
+              <strong>3개의 축</strong>
+            </div>
+            <div id="axisControls" class="axis-controls"></div>
+          </section>
+
+          <section class="panel mirror-panel" aria-label="대칭자 미리보기">
+            <div class="section-heading">
+              <span>대칭자</span>
+              <strong>반대의 플레이어</strong>
+            </div>
+            <div class="profile-pair">
+              <article>
+                <small>나</small>
+                <h2 id="playerTitle">따뜻한 방랑자</h2>
+                <p id="playerProfileText"></p>
+              </article>
+              <article>
+                <small>대칭자</small>
+                <h2 id="rivalTitle">차가운 설계자</h2>
+                <p id="rivalProfileText"></p>
+              </article>
+            </div>
+            <button id="startButton" class="primary-button" type="button">
+              섬으로 들어가기
+            </button>
+          </section>
+        </div>
+      </section>
+
+      <section id="game" class="game screen is-hidden" aria-label="게임 화면">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Rival Everything</p>
+            <h1>살아있는 세계의 시험</h1>
+          </div>
+          <div class="top-actions">
+            <button id="resetButton" class="icon-button" type="button" title="처음부터" aria-label="처음부터">
+              ↺
+            </button>
+          </div>
+        </header>
+
+        <div class="game-grid">
+          <section class="stage panel" aria-label="섬 지도">
+            <canvas id="worldCanvas" width="1024" height="704" aria-label="작은 섬"></canvas>
+            <div id="nearPrompt" class="near-prompt" aria-live="polite"></div>
+          </section>
+
+          <aside class="panel status-panel" aria-label="세계 상태">
+            <div class="section-heading">
+              <span>세계</span>
+              <strong id="worldVerdict">아직 판정 전</strong>
+            </div>
+            <div id="meterList" class="meter-list"></div>
+
+            <div class="section-heading compact-heading">
+              <span>장소</span>
+              <strong id="regionName">섬의 심장</strong>
+            </div>
+            <p id="regionStatus" class="status-copy"></p>
+
+            <div class="section-heading compact-heading">
+              <span>흔적</span>
+              <strong id="rivalCount">0</strong>
+            </div>
+            <ol id="rivalLog" class="rival-log"></ol>
+          </aside>
+        </div>
+
+        <nav class="mobile-controls" aria-label="이동">
+          <button class="move-button" data-dir="up" type="button" title="위" aria-label="위">↑</button>
+          <button class="move-button" data-dir="left" type="button" title="왼쪽" aria-label="왼쪽">←</button>
+          <button id="interactButton" class="interact-button" type="button" title="상호작용" aria-label="상호작용">!</button>
+          <button class="move-button" data-dir="right" type="button" title="오른쪽" aria-label="오른쪽">→</button>
+          <button class="move-button" data-dir="down" type="button" title="아래" aria-label="아래">↓</button>
+        </nav>
+      </section>
+    </main>
+
+    <div id="choiceOverlay" class="overlay is-hidden" role="dialog" aria-modal="true" aria-labelledby="choiceTitle">
+      <section class="modal">
+        <div class="section-heading">
+          <span id="choiceRegion">딜레마</span>
+          <strong id="choiceTitle"></strong>
+        </div>
+        <p id="choicePrompt" class="modal-copy"></p>
+        <div id="choiceOptions" class="choice-options"></div>
+        <button id="closeChoiceButton" class="ghost-button" type="button">돌아가기</button>
+      </section>
+    </div>
+
+    <div id="endingOverlay" class="overlay is-hidden" role="dialog" aria-modal="true" aria-labelledby="endingTitle">
+      <section class="modal ending-modal">
+        <div class="section-heading">
+          <span>통합</span>
+          <strong id="endingTitle">세 번째 답</strong>
+        </div>
+        <p id="endingCopy" class="modal-copy"></p>
+        <div id="integrationChoices" class="choice-options"></div>
+        <div id="finalText" class="final-text is-hidden"></div>
+        <button id="restartFromEndingButton" class="primary-button is-hidden" type="button">다시 태어나기</button>
+      </section>
+    </div>
+
+    <script src="src/game-core.js"></script>
+    <script src="src/app.js"></script>
+  </body>
+</html>
