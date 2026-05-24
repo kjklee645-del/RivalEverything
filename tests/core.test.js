@@ -96,10 +96,24 @@ function assertProgression() {
   assert.equal(state.phase, "integration");
   assert.equal(state.rivalMoves.length, 5);
 
+  const integrationMoves = Core.getIntegrationMoves(state);
+  assert.equal(integrationMoves.length, 5);
+  assert.ok(integrationMoves.includes(final.rivalMove));
+
+  state.rivalMoves.push({
+    milestone: 99,
+    tag: "초과",
+    title: "초과 흔적",
+    summary: "엔딩 후보에는 표시되지 않아야 한다.",
+    worldDelta: { warmth: 0, order: 0, breath: 0, tension: 0 },
+  });
+  assert.equal(Core.getIntegrationMoves(state).length, 5);
+
   const ending = Core.buildEndingText(state, final.rivalMove);
   assert.match(ending, /대칭자/);
   assert.match(ending, /섬/);
   assert.match(ending, new RegExp(final.rivalMove.tag));
+  assert.match(ending, /세계 판정:/);
   assert.match(ending, new RegExp(state.world.verdict()));
 }
 

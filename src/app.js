@@ -10,6 +10,7 @@
     buildEndingText,
     clamp,
     createInitialState,
+    getIntegrationMoves,
     resolveDilemma,
   } = Core;
 
@@ -357,9 +358,10 @@
   }
 
   function openEnding() {
+    const integrationMoves = getIntegrationMoves(state);
     endingCopy.textContent =
-      "섬은 네가 고른 답들을 받아들였다. 이제 대칭자가 남긴 흔적 하나를 지우지 않고 가져가야 한다.";
-    integrationChoices.innerHTML = state.rivalMoves.map((move) => `
+      `섬은 네가 고른 답들을 받아들였다. 현재 세계 판정은 '${state.world.verdict()}'이다. 이제 대칭자가 남긴 흔적 하나를 지우지 않고 가져가야 한다.`;
+    integrationChoices.innerHTML = integrationMoves.map((move) => `
       <button class="choice-card rival-choice-card" type="button" data-milestone="${move.milestone}">
         <small>${move.tag}</small>
         <strong>${move.title}</strong>
@@ -372,7 +374,8 @@
 
     integrationChoices.querySelectorAll(".choice-card").forEach((button) => {
       button.addEventListener("click", () => {
-        const move = state.rivalMoves.find((item) => item.milestone === Number(button.dataset.milestone));
+        const move = integrationMoves.find((item) => item.milestone === Number(button.dataset.milestone));
+        if (!move) return;
         finalText.textContent = buildEndingText(state, move);
         finalText.classList.remove("is-hidden");
         restartFromEndingButton.classList.remove("is-hidden");

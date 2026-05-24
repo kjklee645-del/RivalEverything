@@ -446,8 +446,13 @@
     return [
       `${playerName}는 ${labels}로 섬을 설득했다.`,
       `하지만 대칭자인 ${rivalName}가 남긴 ${adopted}의 흔적을 지우지 않았다.`,
-      `${verdict}. 세계는 승자를 고르는 대신, 네 정체성이 반대의 진실을 품어도 무너지지 않는지 바라본다.`,
+      `세계 판정: ${verdict}. 세계는 승자를 고르는 대신, 네 정체성이 반대의 진실을 품어도 무너지지 않는지 바라본다.`,
     ].join(" ");
+  }
+
+  function getIntegrationMoves(state) {
+    if (!state || !Array.isArray(state.rivalMoves)) return [];
+    return state.rivalMoves.slice(0, DILEMMAS.length);
   }
 
   function getAxis(axisKey) {
@@ -480,6 +485,7 @@
     createInitialState,
     getAxis,
     getDilemma,
+    getIntegrationMoves,
     resolveDilemma,
   };
 });
