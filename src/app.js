@@ -7,13 +7,17 @@
     DILEMMAS,
     MAP,
     METERS,
+    SAVE_VERSION,
     buildEndingText,
     clamp,
     createInitialState,
     getIntegrationMoves,
+    restoreState,
     resolveDilemma,
+    serializeState,
   } = Core;
 
+  const SAVE_KEY = "rival-everything:mvp-save";
   const creator = document.querySelector("#creator");
   const game = document.querySelector("#game");
   const axisControls = document.querySelector("#axisControls");
@@ -22,6 +26,7 @@
   const playerProfileText = document.querySelector("#playerProfileText");
   const rivalProfileText = document.querySelector("#rivalProfileText");
   const startButton = document.querySelector("#startButton");
+  const continueButton = document.querySelector("#continueButton");
   const resetButton = document.querySelector("#resetButton");
   const canvas = document.querySelector("#worldCanvas");
   const ctx = canvas.getContext("2d");
@@ -80,8 +85,10 @@
   buildCreator();
   updateCreatorPreview();
   buildMeters();
+  updateContinueButton();
 
   startButton.addEventListener("click", startGame);
+  continueButton.addEventListener("click", continueGame);
   resetButton.addEventListener("click", restart);
   interactButton.addEventListener("click", interact);
   closeChoiceButton.addEventListener("click", closeChoice);
@@ -190,6 +197,34 @@
 
   function startGame() {
     state = createInitialState(selections);
+    clearSavedGame();
+    enterGameScreen();
+  }
+
+  function continueGame() {
+    const savedData = readSavedGame();
+    if (!savedData) {
+      updateContinueButton();
+      return;
+    }
+
+    try {
+      state = restoreState(savedData);
+    } catch (error) {
+      clearSavedGame();
+      updateContinueButton();
+      return;
+    }
+
+    Object.assign(selections, state.playerProfile.selections);
+    updateCreatorPreview();
+    enterGameScreen();
+    if (state.phase === "integration") {
+      setTimeout(openEnding, 250);
+    }
+  }
+
+  function enterGameScreen() {
     creator.classList.add("is-hidden");
     game.classList.remove("is-hidden");
     window.scrollTo(0, 0);
@@ -208,10 +243,46 @@
     endingOverlay.classList.add("is-hidden");
     finalText.classList.add("is-hidden");
     restartFromEndingButton.classList.add("is-hidden");
+    clearSavedGame();
     game.classList.add("is-hidden");
     creator.classList.remove("is-hidden");
     window.scrollTo(0, 0);
     updateCreatorPreview();
+    updateContinueButton();
+  }
+
+  function saveGame() {
+    if (!state) return;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(state)));
+      updateContinueButton();
+    } catch (error) {
+      // Saving is best-effort so the core loop keeps working if storage is blocked.
+    }
+  }
+
+  function readSavedGame() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearSavedGame() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (error) {
+      // Ignore storage errors; restart should still reset the in-memory run.
+    }
+  }
+
+  function updateContinueButton() {
+    const savedData = readSavedGame();
+    const hasSave = Boolean(savedData && savedData.version === SAVE_VERSION);
+    continueButton.hidden = !hasSave;
+    continueButton.disabled = !hasSave;
   }
 
   function buildMeters() {
@@ -341,6 +412,9 @@
               targetId: result.rivalMove.targetDilemmaId,
             }
           : null;
+        if (result.resolved) {
+          saveGame();
+        }
         closeChoice();
         window.scrollTo({ top: 0, behavior: "smooth" });
         updatePanels();
@@ -571,15 +645,20 @@
   }
 
   function drawPaths() {
+    const points = DILEMMAS.map((dilemma) => dilemma.location);
+    if (points.length < 2) return;
+
     ctx.strokeStyle = "rgba(75, 56, 39, 0.18)";
     ctx.lineWidth = 26;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
-    ctx.moveTo(232, 222);
-    ctx.quadraticCurveTo(480, 312, 774, 218);
-    ctx.quadraticCurveTo(690, 374, 514, 524);
-    ctx.quadraticCurveTo(392, 416, 232, 222);
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach((point, index) => {
+      const next = points[(index + 1) % points.length];
+      const control = getPathControl(point, next, index);
+      ctx.quadraticCurveTo(control.x, control.y, next.x, next.y);
+    });
     ctx.stroke();
 
     ctx.strokeStyle = "rgba(247, 238, 219, 0.72)";
@@ -593,6 +672,16 @@
     ctx.setLineDash([]);
   }
 
+  function getPathControl(start, end, index) {
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2;
+    const centerPull = 0.28;
+    return {
+      x: midX + (MAP.width / 2 - midX) * centerPull + Math.sin(index * 1.7) * 18,
+      y: midY + (MAP.height / 2 - midY) * centerPull + Math.cos(index * 1.3) * 14,
+    };
+  }
+
   function drawWorldCondition(now) {
     if (!state) return;
     const tension = state.world.metrics.tension;
@@ -604,6 +693,7 @@
     state.rivalMoves.forEach((move, index) => {
       const target = DILEMMAS.find((dilemma) => dilemma.id === move.targetDilemmaId);
       const source = DILEMMAS.find((dilemma) => dilemma.id === move.sourceDilemmaId);
+      if (!source || !target) return;
       const wobble = Math.sin(now / 420 + index) * 14;
       ctx.beginPath();
       ctx.moveTo(source.location.x, source.location.y);
@@ -650,10 +740,11 @@
       ctx.fill();
       ctx.stroke();
 
-      drawRegionScene(dilemma.id, region, now);
+      drawRegionScene(dilemma, region, now);
+      drawRegionStatusBadge(region, hasRival);
 
       ctx.fillStyle = "#17201d";
-      ctx.font = "900 22px system-ui, sans-serif";
+      ctx.font = "900 20px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.lineWidth = 4;
       ctx.strokeStyle = "rgba(255, 248, 233, 0.84)";
@@ -669,16 +760,58 @@
     });
   }
 
-  function drawRegionScene(id, region, now) {
-    if (id === "village") {
+  function drawRegionScene(dilemma, region, now) {
+    if (dilemma.id === "village") {
       drawRegionVillage(region);
       return;
     }
-    if (id === "gate") {
+    if (dilemma.id === "gate") {
       drawRegionGate(region);
       return;
     }
-    drawRegionForest(region, now);
+    if (dilemma.id === "forest") {
+      drawRegionForest(region, now);
+      return;
+    }
+    if (dilemma.id === "archive") {
+      drawRegionArchive(region, now);
+      return;
+    }
+    if (dilemma.id === "harbor") {
+      drawRegionHarbor(region, now);
+      return;
+    }
+    drawRegionFallback(dilemma, region, now);
+  }
+
+  function drawRegionStatusBadge(region, hasRival) {
+    ctx.save();
+    ctx.translate(-43, -43);
+    ctx.fillStyle = region.resolved ? "#163b36" : "#d6a348";
+    ctx.strokeStyle = "#fff8e9";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = region.resolved ? "#fff8e9" : "#17201d";
+    ctx.font = "900 18px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(region.resolved ? "✓" : "!", 0, 1);
+    ctx.restore();
+
+    if (!hasRival) return;
+    ctx.save();
+    ctx.translate(43, -43);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = "#65507a";
+    ctx.strokeStyle = "#fff8e9";
+    ctx.lineWidth = 3;
+    ctx.fillRect(-11, -11, 22, 22);
+    ctx.strokeRect(-11, -11, 22, 22);
+    ctx.restore();
   }
 
   function drawRegionVillage(region) {
@@ -737,6 +870,116 @@
       }
     }
     ctx.restore();
+  }
+
+  function drawRegionArchive(region, now) {
+    ctx.save();
+    ctx.translate(0, 3);
+    ctx.fillStyle = region.resolved ? "#6f7fb8" : "#8c6652";
+    ctx.strokeStyle = "#fff8e9";
+    ctx.lineWidth = 4;
+    ctx.fillRect(-34, -20, 68, 44);
+    ctx.strokeRect(-34, -20, 68, 44);
+
+    ctx.fillStyle = "#f0c77b";
+    for (let x = -22; x <= 22; x += 22) {
+      ctx.fillRect(x - 5, -10, 10, 30);
+    }
+
+    ctx.strokeStyle = "#17201d";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-40, -21);
+    ctx.lineTo(0, -42);
+    ctx.lineTo(40, -21);
+    ctx.stroke();
+
+    if (!region.resolved) {
+      const flame = 1 + Math.sin(now / 160) * 0.12;
+      ctx.fillStyle = "#b85b55";
+      ctx.beginPath();
+      ctx.moveTo(18, -30);
+      ctx.quadraticCurveTo(32 * flame, -54, 38, -22);
+      ctx.quadraticCurveTo(28, -32, 22, -12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#d6a348";
+      ctx.beginPath();
+      ctx.moveTo(26, -24);
+      ctx.quadraticCurveTo(34, -40, 36, -20);
+      ctx.quadraticCurveTo(30, -26, 28, -12);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawRegionHarbor(region, now) {
+    ctx.save();
+    ctx.translate(0, 8);
+    ctx.strokeStyle = "#6d4b31";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-38, 22);
+    ctx.lineTo(38, 22);
+    ctx.moveTo(-24, 22);
+    ctx.lineTo(-24, -10);
+    ctx.moveTo(0, 22);
+    ctx.lineTo(0, -14);
+    ctx.moveTo(24, 22);
+    ctx.lineTo(24, -10);
+    ctx.stroke();
+
+    ctx.fillStyle = region.resolved ? "#4f9aa0" : "#d8cba9";
+    ctx.strokeStyle = "#17201d";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-32, 1);
+    ctx.quadraticCurveTo(0, 26, 34, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#17201d";
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -40);
+    ctx.stroke();
+    ctx.fillStyle = region.resolved ? "#fff8e9" : "#b85b55";
+    ctx.beginPath();
+    ctx.moveTo(4, -38);
+    ctx.lineTo(30, -18);
+    ctx.lineTo(4, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(255, 248, 233, ${region.resolved ? 0.62 : 0.38})`;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i += 1) {
+      const y = 34 + i * 8;
+      const drift = Math.sin(now / 260 + i) * 5;
+      ctx.beginPath();
+      ctx.moveTo(-42, y);
+      ctx.quadraticCurveTo(-12 + drift, y - 8, 18 + drift, y);
+      ctx.quadraticCurveTo(34 + drift, y + 4, 48, y - 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawRegionFallback(dilemma, region, now) {
+    if (dilemma.axis === "care") {
+      drawRegionVillage(region);
+      return;
+    }
+    if (dilemma.axis === "agency") {
+      drawRegionGate(region);
+      return;
+    }
+    drawRegionForest(region, now);
   }
 
   function drawRegionIcon(id) {

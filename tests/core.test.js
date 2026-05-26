@@ -117,10 +117,52 @@ function assertProgression() {
   assert.match(ending, new RegExp(state.world.verdict()));
 }
 
+function assertSaveRestore() {
+  const state = Core.createInitialState({
+    care: "right",
+    agency: "left",
+    bond: "right",
+  });
+  state.player.x = 286;
+  state.player.y = 214;
+
+  Core.resolveDilemma(state, "village", "ration-water");
+  Core.resolveDilemma(state, "gate", "open-gate");
+
+  const saved = Core.serializeState(state);
+  assert.equal(saved.version, Core.SAVE_VERSION);
+  assert.equal(typeof saved.savedAt, "string");
+  assert.deepEqual(saved.playerSelections, {
+    care: "right",
+    agency: "left",
+    bond: "right",
+  });
+  assert.equal(saved.playerPosition.x, 286);
+  assert.equal(saved.playerPosition.y, 214);
+  assert.equal(saved.completedCount, 2);
+  assert.equal(saved.rivalMoves[0] instanceof Core.RivalMove, false);
+  assert.doesNotThrow(() => JSON.stringify(saved));
+
+  const restored = Core.restoreState(JSON.parse(JSON.stringify(saved)));
+  assert.equal(restored.completedCount, state.completedCount);
+  assert.deepEqual(restored.world.metrics, state.world.metrics);
+  assert.equal(restored.rivalMoves.length, state.rivalMoves.length);
+  assert.equal(restored.rivalMoves[0] instanceof Core.RivalMove, true);
+  assert.equal(restored.regions.village.resolved, true);
+  assert.equal(restored.regions.gate.resolved, true);
+  assert.equal(restored.regions.gate.rivalInfluences.length, 1);
+  assert.equal(restored.regions.forest.rivalInfluences.length, 1);
+  assert.equal(restored.player.x, state.player.x);
+  assert.equal(restored.player.y, state.player.y);
+  assert.equal(restored.playerProfile.getLabel("care"), "효율");
+  assert.equal(restored.rivalProfile.getLabel("bond"), "신뢰");
+}
+
 function run() {
   assertDilemmaData();
   assertIdentityProfiles();
   assertProgression();
+  assertSaveRestore();
 }
 
 run();

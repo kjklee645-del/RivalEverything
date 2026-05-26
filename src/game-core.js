@@ -8,6 +8,7 @@
   "use strict";
 
   const MAP = Object.freeze({ width: 1024, height: 704 });
+  const SAVE_VERSION = 1;
 
   const AXES = Object.freeze([
     {
@@ -455,6 +456,121 @@
     return state.rivalMoves.slice(0, DILEMMAS.length);
   }
 
+  function serializeState(state) {
+    return {
+      version: SAVE_VERSION,
+      phase: state.phase,
+      playerSelections: Object.assign({}, state.playerProfile.selections),
+      playerPosition: {
+        x: state.player.x,
+        y: state.player.y,
+      },
+      regions: serializeRegions(state.regions),
+      worldMetrics: Object.assign({}, state.world.metrics),
+      rivalMoves: state.rivalMoves.map(serializeRivalMove),
+      completedCount: state.completedCount,
+      savedAt: new Date().toISOString(),
+    };
+  }
+
+  function restoreState(savedData) {
+    const data = typeof savedData === "string" ? JSON.parse(savedData) : savedData;
+    if (!data || data.version !== SAVE_VERSION) {
+      throw new Error("Unsupported save data");
+    }
+
+    const state = createInitialState(data.playerSelections || {});
+    state.phase = data.phase === "integration" ? "integration" : "exploring";
+    state.player.x = readNumber(data.playerPosition && data.playerPosition.x, state.player.x, 92, MAP.width - 92);
+    state.player.y = readNumber(data.playerPosition && data.playerPosition.y, state.player.y, 86, MAP.height - 86);
+    state.completedCount = readNumber(data.completedCount, 0, 0, DILEMMAS.length);
+
+    restoreRegions(state, data.regions || {});
+    restoreWorldMetrics(state, data.worldMetrics || {});
+    state.rivalMoves = restoreRivalMoves(data.rivalMoves || []);
+    rebuildRivalInfluences(state);
+
+    return state;
+  }
+
+  function serializeRegions(regions) {
+    const savedRegions = {};
+    DILEMMAS.forEach((dilemma) => {
+      const region = regions[dilemma.id];
+      savedRegions[dilemma.id] = {
+        resolved: Boolean(region && region.resolved),
+        choiceId: region ? region.choiceId : null,
+        outcome: region ? region.outcome : dilemma.unresolved,
+        npc: region ? region.npc : "",
+        rivalInfluenceMilestones: region
+          ? region.rivalInfluences.map((move) => move.milestone)
+          : [],
+      };
+    });
+    return savedRegions;
+  }
+
+  function serializeRivalMove(move) {
+    return {
+      milestone: move.milestone,
+      sourceDilemmaId: move.sourceDilemmaId,
+      targetDilemmaId: move.targetDilemmaId,
+      choiceId: move.choiceId,
+      title: move.title,
+      tag: move.tag,
+      summary: move.summary,
+      worldDelta: Object.assign({}, move.worldDelta),
+    };
+  }
+
+  function restoreRegions(state, savedRegions) {
+    DILEMMAS.forEach((dilemma) => {
+      const savedRegion = savedRegions[dilemma.id];
+      if (!savedRegion) return;
+      const region = state.regions[dilemma.id];
+      region.resolved = Boolean(savedRegion.resolved);
+      region.choiceId = typeof savedRegion.choiceId === "string" ? savedRegion.choiceId : null;
+      region.outcome = typeof savedRegion.outcome === "string" ? savedRegion.outcome : dilemma.unresolved;
+      region.npc = typeof savedRegion.npc === "string" ? savedRegion.npc : "";
+      region.rivalInfluences = [];
+    });
+  }
+
+  function restoreWorldMetrics(state, metrics) {
+    Object.keys(state.world.metrics).forEach((key) => {
+      state.world.metrics[key] = readNumber(metrics[key], state.world.metrics[key], 0, 10);
+    });
+  }
+
+  function restoreRivalMoves(savedMoves) {
+    return savedMoves.map((move) => new RivalMove({
+      milestone: move.milestone,
+      sourceDilemmaId: move.sourceDilemmaId,
+      targetDilemmaId: move.targetDilemmaId,
+      choiceId: move.choiceId,
+      title: move.title,
+      tag: move.tag,
+      summary: move.summary,
+      worldDelta: Object.assign({}, move.worldDelta),
+    }));
+  }
+
+  function rebuildRivalInfluences(state) {
+    Object.keys(state.regions).forEach((id) => {
+      state.regions[id].rivalInfluences = [];
+    });
+    state.rivalMoves.forEach((move) => {
+      const region = state.regions[move.targetDilemmaId];
+      if (region) region.rivalInfluences.push(move);
+    });
+  }
+
+  function readNumber(value, fallback, min, max) {
+    return typeof value === "number" && Number.isFinite(value)
+      ? clamp(value, min, max)
+      : fallback;
+  }
+
   function getAxis(axisKey) {
     const axis = AXES.find((item) => item.key === axisKey);
     if (!axis) throw new Error(`Unknown axis: ${axisKey}`);
@@ -476,6 +592,7 @@
     DILEMMAS,
     MAP,
     METERS,
+    SAVE_VERSION,
     IdentityProfile,
     RegionState,
     RivalMove,
@@ -486,6 +603,8 @@
     getAxis,
     getDilemma,
     getIntegrationMoves,
+    restoreState,
     resolveDilemma,
+    serializeState,
   };
 });
